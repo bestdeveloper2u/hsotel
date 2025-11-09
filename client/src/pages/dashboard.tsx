@@ -1,21 +1,42 @@
+import { useQuery } from "@tanstack/react-query";
 import { StatCard } from "@/components/stat-card";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Users, Building2, Building, DollarSign, Plus, FileText } from "lucide-react";
+import { apiRequest } from "@/lib/api";
 
 export default function Dashboard() {
+  const { data: users = [] } = useQuery({
+    queryKey: ['/api/users'],
+    queryFn: () => apiRequest('/api/users')
+  });
+
+  const { data: hostels = [] } = useQuery({
+    queryKey: ['/api/hostels'],
+    queryFn: () => apiRequest('/api/hostels')
+  });
+
+  const { data: corporateOffices = [] } = useQuery({
+    queryKey: ['/api/corporate-offices'],
+    queryFn: () => apiRequest('/api/corporate-offices')
+  });
+
+  const { data: payments = [] } = useQuery({
+    queryKey: ['/api/payments'],
+    queryFn: () => apiRequest('/api/payments')
+  });
+
+  const totalRevenue = payments.reduce((sum: number, p: any) => sum + parseFloat(p.amount || 0), 0);
+
   const stats = [
-    { title: "Total Users", value: "1,234", icon: Users, trend: "12% from last month", trendUp: true },
-    { title: "Active Hostels", value: "45", icon: Building2, trend: "5% from last month", trendUp: true },
-    { title: "Corporate Offices", value: "28", icon: Building, trend: "8% from last month", trendUp: true },
-    { title: "Monthly Revenue", value: "$12,450", icon: DollarSign, trend: "3% from last month", trendUp: false },
+    { title: "Total Users", value: users.length.toString(), icon: Users, trend: "12% from last month", trendUp: true },
+    { title: "Active Hostels", value: hostels.length.toString(), icon: Building2, trend: "5% from last month", trendUp: true },
+    { title: "Corporate Offices", value: corporateOffices.length.toString(), icon: Building, trend: "8% from last month", trendUp: true },
+    { title: "Total Revenue", value: `$${totalRevenue.toFixed(2)}`, icon: DollarSign, trend: "3% from last month", trendUp: false },
   ];
 
   const recentActivity = [
-    { id: 1, user: "John Doe", action: "registered as Individual", time: "2 hours ago" },
-    { id: 2, user: "Sunshine Hostel", action: "added 5 new members", time: "4 hours ago" },
-    { id: 3, user: "Tech Corp", action: "made a payment of $500", time: "6 hours ago" },
-    { id: 4, user: "Jane Smith", action: "submitted feedback", time: "8 hours ago" },
+    { id: 1, user: "System", action: "initialized", time: "Just now" },
   ];
 
   return (

@@ -1,14 +1,44 @@
+import { useQuery, useMutation } from "@tanstack/react-query";
 import { RolePermissionMatrix } from "@/components/role-permission-matrix";
 import { Button } from "@/components/ui/button";
 import { Plus } from "lucide-react";
+import { apiRequest } from "@/lib/api";
+import { queryClient } from "@/lib/queryClient";
+import { useToast } from "@/hooks/use-toast";
 
 export default function RolesPage() {
-  const mockRoles = [
-    { id: '1', name: 'Super Admin', permissions: ['Manage Users', 'Manage Roles', 'Manage Hostels', 'Manage Members', 'View Reports', 'Manage Payments', 'Manage Feedback'] },
-    { id: '2', name: 'Hostel Owner', permissions: ['Manage Members', 'View Reports', 'Manage Payments'] },
-    { id: '3', name: 'Corporate Admin', permissions: ['Manage Members', 'View Reports'] },
-    { id: '4', name: 'Member', permissions: ['View Reports'] },
-  ];
+  const { toast } = useToast();
+
+  const { data: roles = [], isLoading } = useQuery({
+    queryKey: ['/api/roles'],
+    queryFn: () => apiRequest('/api/roles')
+  });
+
+  const updateRoleMutation = useMutation({
+    mutationFn: ({ roleId, permissions }: { roleId: string; permissions: string[] }) =>
+      apiRequest(`/api/roles/${roleId}`, {
+        method: 'PUT',
+        body: JSON.stringify({ permissions })
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/roles'] });
+      toast({
+        title: "Success",
+        description: "Role permissions updated"
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Error",
+        description: error.message,
+        variant: "destructive"
+      });
+    }
+  });
+
+  if (isLoading) {
+    return <div>Loading...</div>;
+  }
 
   return (
     <div className="space-y-6">
@@ -24,8 +54,8 @@ export default function RolesPage() {
       </div>
       
       <RolePermissionMatrix 
-        roles={mockRoles}
-        onUpdate={(roleId, permissions) => console.log('Update role:', roleId, permissions)}
+        roles={roles}
+        onUpdate={(roleId, permissions) => updateRoleMutation.mutate({ roleId, permissions })}
       />
     </div>
   );

@@ -1,30 +1,106 @@
 import { useState } from "react";
-import { useLocation } from "wouter";
+import { useAuth } from "@/lib/auth";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Building2 } from "lucide-react";
+import { useToast } from "@/hooks/use-toast";
+import { apiRequest } from "@/lib/api";
 
 export default function LoginPage() {
-  const [, setLocation] = useLocation();
+  const { login } = useAuth();
+  const { toast } = useToast();
+  
   const [loginEmail, setLoginEmail] = useState("");
   const [loginPassword, setLoginPassword] = useState("");
+  const [loginLoading, setLoginLoading] = useState(false);
+  
   const [registerName, setRegisterName] = useState("");
   const [registerEmail, setRegisterEmail] = useState("");
   const [registerPassword, setRegisterPassword] = useState("");
+  const [registerEntityType, setRegisterEntityType] = useState("Individual");
+  const [registerLoading, setRegisterLoading] = useState(false);
+  
+  // Entity-specific fields
+  const [entityName, setEntityName] = useState("");
+  const [entityAddress, setEntityAddress] = useState("");
+  const [entityPhone, setEntityPhone] = useState("");
+  const [hostelCapacity, setHostelCapacity] = useState("");
 
-  const handleLogin = (e: React.FormEvent) => {
+  const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
-    console.log('Login:', { email: loginEmail, password: loginPassword });
-    setLocation('/');
+    setLoginLoading(true);
+    
+    try {
+      await login(loginEmail, loginPassword);
+      toast({
+        title: "Success",
+        description: "Logged in successfully"
+      });
+    } catch (error: any) {
+      toast({
+        title: "Error",
+        description: error.message,
+        variant: "destructive"
+      });
+    } finally {
+      setLoginLoading(false);
+    }
   };
 
-  const handleRegister = (e: React.FormEvent) => {
+  const handleRegister = async (e: React.FormEvent) => {
     e.preventDefault();
-    console.log('Register:', { name: registerName, email: registerEmail, password: registerPassword });
-    setLocation('/');
+    setRegisterLoading(true);
+    
+    try {
+      const payload: any = {
+        name: registerName,
+        email: registerEmail,
+        password: registerPassword,
+        entityType: registerEntityType
+      };
+
+      // Add entity data if not Individual
+      if (registerEntityType !== 'Individual') {
+        payload.entityName = entityName;
+        payload.entityData = {
+          name: entityName,
+          address: entityAddress,
+          contactPhone: entityPhone
+        };
+
+        if (registerEntityType === 'Hostel') {
+          payload.entityData.capacity = parseInt(hostelCapacity) || 10;
+        }
+      }
+
+      const response = await apiRequest('/api/auth/register', {
+        method: 'POST',
+        body: JSON.stringify(payload)
+      });
+
+      // Manually set auth state
+      localStorage.setItem('token', response.token);
+      window.location.href = '/';
+
+      toast({
+        title: "Success",
+        description: "Account created successfully"
+      });
+    } catch (error: any) {
+      toast({
+        title: "Error",
+        description: error.message,
+        variant: "destructive"
+      });
+    } finally {
+      setRegisterLoading(false);
+    }
   };
+
+  const showEntityFields = registerEntityType !== 'Individual';
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-background p-4">
@@ -68,8 +144,8 @@ export default function LoginPage() {
                     data-testid="input-login-password"
                   />
                 </div>
-                <Button type="submit" className="w-full" data-testid="button-login">
-                  Login
+                <Button type="submit" className="w-full" disabled={loginLoading} data-testid="button-login">
+                  {loginLoading ? 'Logging in...' : 'Login'}
                 </Button>
               </form>
             </TabsContent>
@@ -108,8 +184,75 @@ export default function LoginPage() {
                     data-testid="input-register-password"
                   />
                 </div>
-                <Button type="submit" className="w-full" data-testid="button-register">
-                  Register
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">Account Type</label>
+                  <Select value={registerEntityType} onValueChange={setRegisterEntityType}>
+                    <SelectTrigger data-testid="select-entity-type">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="Individual">Individual</SelectItem>
+                      <SelectItem value="Hostel">Hostel</SelectItem>
+                      <SelectItem value="Corporate">Corporate Office</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                {showEntityFields && (
+                  <>
+                    <div className="space-y-2">
+                      <label className="text-sm font-medium">
+                        {registerEntityType === 'Hostel' ? 'Hostel' : 'Company'} Name
+                      </label>
+                      <Input
+                        type="text"
+                        placeholder="Enter name"
+                        value={entityName}
+                        onChange={(e) => setEntityName(e.target.value)}
+                        required
+                        data-testid="input-entity-name"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <label className="text-sm font-medium">Address</label>
+                      <Input
+                        type="text"
+                        placeholder="Enter address"
+                        value={entityAddress}
+                        onChange={(e) => setEntityAddress(e.target.value)}
+                        required
+                        data-testid="input-entity-address"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <label className="text-sm font-medium">Contact Phone</label>
+                      <Input
+                        type="tel"
+                        placeholder="+1234567890"
+                        value={entityPhone}
+                        onChange={(e) => setEntityPhone(e.target.value)}
+                        required
+                        data-testid="input-entity-phone"
+                      />
+                    </div>
+                    {registerEntityType === 'Hostel' && (
+                      <div className="space-y-2">
+                        <label className="text-sm font-medium">Capacity</label>
+                        <Input
+                          type="number"
+                          placeholder="Number of beds"
+                          value={hostelCapacity}
+                          onChange={(e) => setHostelCapacity(e.target.value)}
+                          required
+                          data-testid="input-hostel-capacity"
+                        />
+                      </div>
+                    )}
+                  </>
+                )}
+
+                <Button type="submit" className="w-full" disabled={registerLoading} data-testid="button-register">
+                  {registerLoading ? 'Registering...' : 'Register'}
                 </Button>
               </form>
             </TabsContent>

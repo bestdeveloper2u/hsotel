@@ -1,15 +1,45 @@
+import { useQuery, useMutation } from "@tanstack/react-query";
 import { MealTracker } from "@/components/meal-tracker";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
+import { apiRequest } from "@/lib/api";
+import { queryClient } from "@/lib/queryClient";
+import { useToast } from "@/hooks/use-toast";
 
 export default function MealsPage() {
-  const mockMembers = [
-    { id: '1', name: 'John Doe' },
-    { id: '2', name: 'Jane Smith' },
-    { id: '3', name: 'Bob Johnson' },
-    { id: '4', name: 'Alice Williams' },
-    { id: '5', name: 'Charlie Brown' },
-  ];
+  const { toast } = useToast();
+
+  const { data: members = [] } = useQuery({
+    queryKey: ['/api/members'],
+    queryFn: () => apiRequest('/api/members')
+  });
+
+  const { data: meals = [] } = useQuery({
+    queryKey: ['/api/meals'],
+    queryFn: () => apiRequest('/api/meals')
+  });
+
+  const recordMealMutation = useMutation({
+    mutationFn: (data: { memberId: string; mealType: string; date: Date }) =>
+      apiRequest('/api/meals', {
+        method: 'POST',
+        body: JSON.stringify(data)
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/meals'] });
+      toast({
+        title: "Success",
+        description: "Meal recorded successfully"
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Error",
+        description: error.message,
+        variant: "destructive"
+      });
+    }
+  });
 
   const mockChartData = [
     { name: 'Mon', breakfast: 45, lunch: 52, dinner: 48 },
@@ -30,8 +60,8 @@ export default function MealsPage() {
 
       <div className="grid gap-6 md:grid-cols-2">
         <MealTracker 
-          members={mockMembers}
-          onRecordMeal={(data) => console.log('Record meal:', data)}
+          members={members}
+          onRecordMeal={(data) => recordMealMutation.mutate(data)}
         />
 
         <Card>
