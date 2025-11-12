@@ -84,38 +84,25 @@ export class DbStorage implements IStorage {
     this.initialized = true;
 
     try {
-      console.log('[DbStorage] Checking existing roles...');
-      const existingRoles = await db.select().from(roles);
-      console.log('[DbStorage] Existing roles:', existingRoles);
-      
-      if (!existingRoles || existingRoles.length === 0) {
-        console.log('[DbStorage] No roles found, inserting default roles...');
-        const result = await db.insert(roles).values([
-          {
-            name: 'Super Admin',
-            description: 'Full system access',
-            permissions: ['Manage Users', 'Manage Roles', 'Manage Hostels', 'Manage Members', 'View Reports', 'Manage Payments', 'Manage Feedback']
-          },
-          {
-            name: 'Hostel Owner',
-            description: 'Hostel management access',
-            permissions: ['Manage Members', 'View Reports', 'Manage Payments']
-          },
-          {
-            name: 'Corporate Admin',
-            description: 'Corporate office management access',
-            permissions: ['Manage Members', 'View Reports']
-          }
-        ]).returning();
-        console.log('[DbStorage] Roles inserted successfully:', result);
-      } else {
-        console.log(`[DbStorage] Found ${existingRoles.length} existing roles`);
-      }
+      await db.insert(roles).values([
+        {
+          name: 'Super Admin',
+          description: 'Full system access',
+          permissions: ['Manage Users', 'Manage Roles', 'Manage Hostels', 'Manage Members', 'View Reports', 'Manage Payments', 'Manage Feedback']
+        },
+        {
+          name: 'Hostel Owner',
+          description: 'Hostel management access',
+          permissions: ['Manage Members', 'View Reports', 'Manage Payments']
+        },
+        {
+          name: 'Corporate Admin',
+          description: 'Corporate office management access',
+          permissions: ['Manage Members', 'View Reports']
+        }
+      ]).onConflictDoNothing();
     } catch (error) {
-      console.error('[DbStorage] Error in initializeDefaultRoles:', error);
-      console.error('[DbStorage] Error stack:', error instanceof Error ? error.stack : 'N/A');
-      console.error('[DbStorage] Error message:', error instanceof Error ? error.message : String(error));
-      throw error;
+      console.error('[DbStorage] Error initializing default roles:', error);
     }
   }
 

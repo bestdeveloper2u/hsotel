@@ -3,22 +3,22 @@ import { pgTable, text, varchar, timestamp, integer, boolean, decimal } from "dr
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
-export const users = pgTable("users", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  email: text("email").notNull().unique(),
-  password: text("password").notNull(),
-  name: text("name").notNull(),
-  roleId: varchar("role_id"),
-  entityType: text("entity_type").notNull(),
-  entityId: varchar("entity_id"),
-  createdAt: timestamp("created_at").defaultNow(),
-});
-
 export const roles = pgTable("roles", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   name: text("name").notNull().unique(),
   description: text("description"),
   permissions: text("permissions").array().notNull(),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const users = pgTable("users", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  email: text("email").notNull().unique(),
+  password: text("password").notNull(),
+  name: text("name").notNull(),
+  roleId: varchar("role_id").references(() => roles.id),
+  entityType: text("entity_type").notNull(),
+  entityId: varchar("entity_id"),
   createdAt: timestamp("created_at").defaultNow(),
 });
 
@@ -55,7 +55,7 @@ export const members = pgTable("members", {
 
 export const mealRecords = pgTable("meal_records", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  memberId: varchar("member_id").notNull(),
+  memberId: varchar("member_id").notNull().references(() => members.id),
   mealType: text("meal_type").notNull(),
   date: timestamp("date").notNull(),
   createdAt: timestamp("created_at").defaultNow(),
@@ -73,7 +73,7 @@ export const payments = pgTable("payments", {
 
 export const feedback = pgTable("feedback", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  userId: varchar("user_id").notNull(),
+  userId: varchar("user_id").notNull().references(() => users.id),
   entityType: text("entity_type"),
   entityId: varchar("entity_id"),
   rating: integer("rating").notNull(),
