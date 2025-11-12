@@ -1,4 +1,4 @@
-import { Home, Users, Shield, Building2, Building, UserCircle, Utensils, CreditCard, MessageSquare, Settings, LogOut } from "lucide-react";
+import { Home, Users, Shield, Building2, Building, UserCircle, Utensils, CreditCard, MessageSquare, Settings, LogOut, DollarSign } from "lucide-react";
 import {
   Sidebar,
   SidebarContent,
@@ -13,21 +13,39 @@ import {
 import { Link, useLocation } from "wouter";
 import { useAuth } from "@/lib/auth";
 
-const menuItems = [
-  { title: "Dashboard", url: "/", icon: Home },
-  { title: "Users", url: "/users", icon: Users },
-  { title: "Roles", url: "/roles", icon: Shield },
-  { title: "Hostels", url: "/hostels", icon: Building2 },
-  { title: "Corporate Offices", url: "/corporate", icon: Building },
-  { title: "Members", url: "/members", icon: UserCircle },
-  { title: "Meal Tracking", url: "/meals", icon: Utensils },
-  { title: "Payments", url: "/payments", icon: CreditCard },
-  { title: "Feedback", url: "/feedback", icon: MessageSquare },
+interface MenuItem {
+  title: string;
+  url: string;
+  icon: any;
+  requiredPermissions: string[];
+}
+
+const menuItems: MenuItem[] = [
+  { title: "Dashboard", url: "/", icon: Home, requiredPermissions: [] },
+  { title: "Users", url: "/users", icon: Users, requiredPermissions: ['Manage Users'] },
+  { title: "Roles", url: "/roles", icon: Shield, requiredPermissions: ['Manage Roles'] },
+  { title: "Hostels", url: "/hostels", icon: Building2, requiredPermissions: ['Manage Hostels'] },
+  { title: "Corporate Offices", url: "/corporate", icon: Building, requiredPermissions: ['Manage Hostels'] },
+  { title: "Members", url: "/members", icon: UserCircle, requiredPermissions: ['Manage Members'] },
+  { title: "Meal Tracking", url: "/meals", icon: Utensils, requiredPermissions: ['Manage Members'] },
+  { title: "Meal Prices", url: "/meal-prices", icon: DollarSign, requiredPermissions: [] },
+  { title: "Payments", url: "/payments", icon: CreditCard, requiredPermissions: ['Manage Payments'] },
+  { title: "Feedback", url: "/feedback", icon: MessageSquare, requiredPermissions: [] },
 ];
 
 export function AppSidebar() {
   const [location] = useLocation();
-  const { logout } = useAuth();
+  const { user, logout } = useAuth();
+
+  const hasPermission = (requiredPermissions: string[]) => {
+    if (requiredPermissions.length === 0) return true;
+    if (!user?.role?.permissions) return false;
+    return requiredPermissions.some(permission => 
+      user.role!.permissions.includes(permission)
+    );
+  };
+
+  const visibleMenuItems = menuItems.filter(item => hasPermission(item.requiredPermissions));
 
   return (
     <Sidebar>
@@ -40,9 +58,9 @@ export function AppSidebar() {
           <SidebarGroupLabel>Main Menu</SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>
-              {menuItems.map((item) => (
+              {visibleMenuItems.map((item) => (
                 <SidebarMenuItem key={item.title}>
-                  <SidebarMenuButton asChild isActive={location === item.url} data-testid={`link-${item.title.toLowerCase().replace(' ', '-')}`}>
+                  <SidebarMenuButton asChild isActive={location === item.url} data-testid={`link-${item.title.toLowerCase().replace(/ /g, '-')}`}>
                     <Link href={item.url}>
                       <item.icon className="w-4 h-4" />
                       <span>{item.title}</span>

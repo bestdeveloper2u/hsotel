@@ -1,6 +1,13 @@
 import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { useLocation } from 'wouter';
 
+interface Role {
+  id: string;
+  name: string;
+  description: string | null;
+  permissions: string[];
+}
+
 interface User {
   id: string;
   email: string;
@@ -8,6 +15,7 @@ interface User {
   roleId: string | null;
   entityType: string;
   entityId: string | null;
+  role?: Role;
 }
 
 interface AuthContextType {
@@ -45,6 +53,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       if (response.ok) {
         const userData = await response.json();
+        
+        // Fetch role information if user has a roleId
+        if (userData.roleId) {
+          try {
+            const roleResponse = await fetch(`/api/roles/${userData.roleId}`, {
+              headers: {
+                'Authorization': `Bearer ${token}`
+              }
+            });
+            if (roleResponse.ok) {
+              const roleData = await roleResponse.json();
+              userData.role = roleData;
+            }
+          } catch (error) {
+            console.error('Failed to fetch role:', error);
+          }
+        }
+        
         setUser(userData);
       } else {
         logout();

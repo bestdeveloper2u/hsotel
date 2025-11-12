@@ -18,6 +18,7 @@ import CorporatePage from "@/pages/corporate";
 import MembersPage from "@/pages/members";
 import PaymentsPage from "@/pages/payments";
 import SettingsPage from "@/pages/settings";
+import MealPricesPage from "@/pages/meal-prices";
 
 function ProtectedRoute({ component: Component }: { component: () => JSX.Element }) {
   const { user, isLoading } = useAuth();
@@ -48,6 +49,7 @@ function Router() {
           <Route path="/corporate" component={() => <ProtectedRoute component={CorporatePage} />} />
           <Route path="/members" component={() => <ProtectedRoute component={MembersPage} />} />
           <Route path="/meals" component={() => <ProtectedRoute component={MealsPage} />} />
+          <Route path="/meal-prices" component={() => <ProtectedRoute component={MealPricesPage} />} />
           <Route path="/payments" component={() => <ProtectedRoute component={PaymentsPage} />} />
           <Route path="/feedback" component={() => <ProtectedRoute component={FeedbackPage} />} />
           <Route path="/settings" component={() => <ProtectedRoute component={SettingsPage} />} />

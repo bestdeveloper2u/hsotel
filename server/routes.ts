@@ -10,7 +10,8 @@ import {
   insertMemberSchema,
   insertMealRecordSchema,
   insertPaymentSchema,
-  insertFeedbackSchema
+  insertFeedbackSchema,
+  insertMealPriceSchema
 } from "@shared/schema";
 
 export async function registerRoutes(app: Express): Promise<Server> {
@@ -180,6 +181,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Role routes
+  app.get("/api/roles/:id", authMiddleware, async (req, res) => {
+    try {
+      const role = await storage.getRole(req.params.id);
+      if (!role) {
+        return res.status(404).json({ error: "Role not found" });
+      }
+      res.json(role);
+    } catch (error: any) {
+      res.status(400).json({ error: error.message });
+    }
+  });
+
   app.get("/api/roles", authMiddleware, requirePermission('Manage Roles'), async (req, res) => {
     try {
       const roles = await storage.getAllRoles();
@@ -288,18 +301,39 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Member routes
-  app.get("/api/members", authMiddleware, requirePermission('Manage Members'), async (req, res) => {
+  app.get("/api/members", authMiddleware, requirePermission('Manage Members'), async (req: AuthRequest, res) => {
     try {
-      const members = await storage.getAllMembers();
-      res.json(members);
+      const user = await storage.getUser(req.userId!);
+      if (!user) {
+        return res.status(404).json({ error: "User not found" });
+      }
+
+      // Super Admin can see all members, others only see their entity's members
+      if (user.entityType && user.entityId) {
+        const members = await storage.getMembersByEntity(user.entityType, user.entityId);
+        res.json(members);
+      } else {
+        const members = await storage.getAllMembers();
+        res.json(members);
+      }
     } catch (error: any) {
       res.status(400).json({ error: error.message });
     }
   });
 
-  app.post("/api/members", authMiddleware, requirePermission('Manage Members'), async (req, res) => {
+  app.post("/api/members", authMiddleware, requirePermission('Manage Members'), async (req: AuthRequest, res) => {
     try {
-      const data = insertMemberSchema.parse(req.body);
+      const user = await storage.getUser(req.userId!);
+      if (!user) {
+        return res.status(404).json({ error: "User not found" });
+      }
+
+      const data = insertMemberSchema.parse({
+        ...req.body,
+        entityType: user.entityType || req.body.entityType,
+        entityId: user.entityId || req.body.entityId
+      });
+      
       const member = await storage.createMember(data);
       res.json(member);
     } catch (error: any) {
@@ -307,25 +341,53 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.put("/api/members/:id", authMiddleware, requirePermission('Manage Members'), async (req, res) => {
+  app.put("/api/members/:id", authMiddleware, requirePermission('Manage Members'), async (req: AuthRequest, res) => {
     try {
-      const member = await storage.updateMember(req.params.id, req.body);
-      if (!member) {
+      const user = await storage.getUser(req.userId!);
+      if (!user) {
+        return res.status(404).json({ error: "User not found" });
+      }
+
+      const existingMember = await storage.getMember(req.params.id);
+      if (!existingMember) {
         return res.status(404).json({ error: "Member not found" });
       }
+
+      // Check if user can edit this member (must be same entity or super admin)
+      if (user.entityType && user.entityId) {
+        if (existingMember.entityType !== user.entityType || existingMember.entityId !== user.entityId) {
+          return res.status(403).json({ error: "Access denied" });
+        }
+      }
+
+      const member = await storage.updateMember(req.params.id, req.body);
       res.json(member);
     } catch (error: any) {
       res.status(400).json({ error: error.message });
     }
   });
 
-  app.delete("/api/members/:id", authMiddleware, requirePermission('Manage Members'), async (req, res) => {
+  app.delete("/api/members/:id", authMiddleware, requirePermission('Manage Members'), async (req: AuthRequest, res) => {
     try {
-      const success = await storage.deleteMember(req.params.id);
-      if (!success) {
+      const user = await storage.getUser(req.userId!);
+      if (!user) {
+        return res.status(404).json({ error: "User not found" });
+      }
+
+      const existingMember = await storage.getMember(req.params.id);
+      if (!existingMember) {
         return res.status(404).json({ error: "Member not found" });
       }
-      res.json({ success: true });
+
+      // Check if user can delete this member (must be same entity or super admin)
+      if (user.entityType && user.entityId) {
+        if (existingMember.entityType !== user.entityType || existingMember.entityId !== user.entityId) {
+          return res.status(403).json({ error: "Access denied" });
+        }
+      }
+
+      const success = await storage.deleteMember(req.params.id);
+      res.json({ success });
     } catch (error: any) {
       res.status(400).json({ error: error.message });
     }
@@ -398,6 +460,87 @@ export async function registerRoutes(app: Express): Promise<Server> {
       });
       const feedback = await storage.createFeedback(data);
       res.json(feedback);
+    } catch (error: any) {
+      res.status(400).json({ error: error.message });
+    }
+  });
+
+  // Meal Prices routes
+  app.get("/api/meal-prices", authMiddleware, async (req: AuthRequest, res) => {
+    try {
+      const user = await storage.getUser(req.userId!);
+      if (!user) {
+        return res.status(404).json({ error: "User not found" });
+      }
+
+      if (user.entityType && user.entityId) {
+        const mealPrice = await storage.getMealPriceByEntity(user.entityType, user.entityId);
+        res.json(mealPrice || null);
+      } else {
+        const allPrices = await storage.getAllMealPrices();
+        res.json(allPrices);
+      }
+    } catch (error: any) {
+      res.status(400).json({ error: error.message });
+    }
+  });
+
+  app.post("/api/meal-prices", authMiddleware, async (req: AuthRequest, res) => {
+    try {
+      const user = await storage.getUser(req.userId!);
+      if (!user) {
+        return res.status(404).json({ error: "User not found" });
+      }
+
+      const data = insertMealPriceSchema.parse({
+        ...req.body,
+        entityType: user.entityType,
+        entityId: user.entityId
+      });
+      
+      const mealPrice = await storage.createMealPrice(data);
+      res.json(mealPrice);
+    } catch (error: any) {
+      res.status(400).json({ error: error.message });
+    }
+  });
+
+  app.put("/api/meal-prices/:id", authMiddleware, async (req: AuthRequest, res) => {
+    try {
+      const user = await storage.getUser(req.userId!);
+      if (!user) {
+        return res.status(404).json({ error: "User not found" });
+      }
+
+      const mealPrice = await storage.getMealPrice(req.params.id);
+      if (!mealPrice) {
+        return res.status(404).json({ error: "Meal price not found" });
+      }
+
+      // Check entity access
+      if (user.entityType && user.entityId) {
+        if (mealPrice.entityType !== user.entityType || mealPrice.entityId !== user.entityId) {
+          return res.status(403).json({ error: "Access denied" });
+        }
+      }
+
+      // Enforce 6-hour restriction
+      const sixHoursInMs = 6 * 60 * 60 * 1000;
+      const lastUpdateTime = mealPrice.updatedAt ? new Date(mealPrice.updatedAt).valueOf() : new Date(mealPrice.createdAt!).valueOf();
+      const timeSinceUpdate = Date.now() - lastUpdateTime;
+      
+      if (timeSinceUpdate > sixHoursInMs) {
+        return res.status(403).json({ 
+          error: "Cannot edit meal prices more than 6 hours after last update",
+          remainingTime: 0
+        });
+      }
+
+      const updated = await storage.updateMealPrice(req.params.id, req.body);
+      res.json({
+        ...updated,
+        remainingEditTime: sixHoursInMs - timeSinceUpdate
+      });
     } catch (error: any) {
       res.status(400).json({ error: error.message });
     }
