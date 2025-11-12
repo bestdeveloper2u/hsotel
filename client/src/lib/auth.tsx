@@ -13,8 +13,10 @@ interface User {
   email: string;
   name: string;
   roleId: string | null;
-  entityType: string;
+  entityType: string | null;
   entityId: string | null;
+  memberId?: string | null;
+  isSuperAdmin?: boolean;
   role?: Role;
 }
 

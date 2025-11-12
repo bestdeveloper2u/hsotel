@@ -38,6 +38,8 @@ export function verifyToken(token: string): { userId: string } | null {
 export interface AuthRequest extends Request {
   userId?: string;
   userPermissions?: string[];
+  user?: any;
+  isSuperAdmin?: boolean;
 }
 
 export function authMiddleware(req: AuthRequest, res: Response, next: NextFunction) {
@@ -56,6 +58,33 @@ export function authMiddleware(req: AuthRequest, res: Response, next: NextFuncti
   next();
 }
 
+export async function loadUserMiddleware(req: AuthRequest, res: Response, next: NextFunction) {
+  try {
+    if (!req.userId) {
+      return res.status(401).json({ error: 'Authentication required' });
+    }
+
+    const user = await storage.getUser(req.userId);
+    if (!user) {
+      return res.status(401).json({ error: 'User not found' });
+    }
+
+    req.user = user;
+    req.isSuperAdmin = user.isSuperAdmin || false;
+
+    if (user.roleId) {
+      const role = await storage.getRole(user.roleId);
+      if (role) {
+        req.userPermissions = role.permissions;
+      }
+    }
+
+    next();
+  } catch (error) {
+    res.status(500).json({ error: 'User load failed' });
+  }
+}
+
 export function requirePermission(permission: string) {
   return async (req: AuthRequest, res: Response, next: NextFunction) => {
     try {
@@ -63,9 +92,16 @@ export function requirePermission(permission: string) {
         return res.status(401).json({ error: 'Authentication required' });
       }
 
-      const user = await storage.getUser(req.userId);
+      const user = req.user || await storage.getUser(req.userId);
       if (!user) {
         return res.status(401).json({ error: 'User not found' });
+      }
+
+      if (user.isSuperAdmin) {
+        req.user = user;
+        req.isSuperAdmin = true;
+        req.userPermissions = ['*'];
+        return next();
       }
 
       if (!user.roleId) {
@@ -81,10 +117,51 @@ export function requirePermission(permission: string) {
         return res.status(403).json({ error: `Permission denied: ${permission} required` });
       }
 
+      req.user = user;
       req.userPermissions = role.permissions;
       next();
     } catch (error) {
       res.status(500).json({ error: 'Permission check failed' });
     }
   };
+}
+
+export function requireSuperAdmin() {
+  return async (req: AuthRequest, res: Response, next: NextFunction) => {
+    try {
+      if (!req.userId) {
+        return res.status(401).json({ error: 'Authentication required' });
+      }
+
+      const user = req.user || await storage.getUser(req.userId);
+      if (!user) {
+        return res.status(401).json({ error: 'User not found' });
+      }
+
+      if (!user.isSuperAdmin) {
+        return res.status(403).json({ error: 'Super Admin access required' });
+      }
+
+      req.user = user;
+      req.isSuperAdmin = true;
+      next();
+    } catch (error) {
+      res.status(500).json({ error: 'Permission check failed' });
+    }
+  };
+}
+
+export function preventSuperAdminModification(req: AuthRequest, res: Response, next: NextFunction) {
+  if (!req.params.id) {
+    return next();
+  }
+
+  storage.getUser(req.params.id).then(targetUser => {
+    if (targetUser && targetUser.isSuperAdmin && !req.isSuperAdmin) {
+      return res.status(403).json({ error: 'Cannot modify Super Admin' });
+    }
+    next();
+  }).catch(() => {
+    res.status(500).json({ error: 'User check failed' });
+  });
 }

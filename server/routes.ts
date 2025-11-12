@@ -1,7 +1,17 @@
 import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
-import { hashPassword, comparePassword, generateToken, authMiddleware, requirePermission, type AuthRequest } from "./auth";
+import { 
+  hashPassword, 
+  comparePassword, 
+  generateToken, 
+  authMiddleware, 
+  loadUserMiddleware,
+  requirePermission, 
+  requireSuperAdmin,
+  preventSuperAdminModification,
+  type AuthRequest 
+} from "./auth";
 import { 
   insertUserSchema, 
   insertRoleSchema,
@@ -66,10 +76,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Assign default role based on entity type
       let roleId = null;
       if (entityType === 'Hostel') {
-        const role = await storage.getRoleByName('Hostel Owner');
+        const role = await storage.getRoleByName('Hostel Admin');
         roleId = role?.id || null;
       } else if (entityType === 'Corporate') {
         const role = await storage.getRoleByName('Corporate Admin');
+        roleId = role?.id || null;
+      } else if (entityType === 'Individual') {
+        const role = await storage.getRoleByName('Individual Member');
         roleId = role?.id || null;
       }
 
@@ -79,7 +92,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
         password: hashedPassword,
         entityType,
         entityId,
-        roleId
+        roleId,
+        memberId: null,
+        isSuperAdmin: false
       });
 
       const token = generateToken(user.id);
@@ -151,9 +166,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.put("/api/users/:id", authMiddleware, requirePermission('Manage Users'), async (req, res) => {
+  app.put("/api/users/:id", authMiddleware, loadUserMiddleware, requirePermission('Manage Users'), preventSuperAdminModification, async (req: AuthRequest, res) => {
     try {
       const updates = req.body;
+      delete updates.isSuperAdmin;
+      
       if (updates.password) {
         updates.password = await hashPassword(updates.password);
       }
@@ -168,7 +185,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.delete("/api/users/:id", authMiddleware, requirePermission('Manage Users'), async (req, res) => {
+  app.delete("/api/users/:id", authMiddleware, loadUserMiddleware, requirePermission('Manage Users'), preventSuperAdminModification, async (req, res) => {
     try {
       const success = await storage.deleteUser(req.params.id);
       if (!success) {
@@ -237,10 +254,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Hostel routes
-  app.get("/api/hostels", authMiddleware, requirePermission('Manage Hostels'), async (req, res) => {
+  app.get("/api/hostels", authMiddleware, loadUserMiddleware, async (req: AuthRequest, res) => {
     try {
-      const hostels = await storage.getAllHostels();
-      res.json(hostels);
+      const user = req.user;
+      
+      if (user.isSuperAdmin) {
+        const hostels = await storage.getAllHostels();
+        return res.json(hostels);
+      }
+      
+      if (user.entityType === 'Hostel' && user.entityId) {
+        const hostel = await storage.getHostel(user.entityId);
+        return res.json(hostel ? [hostel] : []);
+      }
+      
+      return res.status(403).json({ error: 'Access denied' });
     } catch (error: any) {
       res.status(400).json({ error: error.message });
     }
@@ -281,10 +309,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Corporate Office routes
-  app.get("/api/corporate-offices", authMiddleware, requirePermission('Manage Hostels'), async (req, res) => {
+  app.get("/api/corporate-offices", authMiddleware, loadUserMiddleware, async (req: AuthRequest, res) => {
     try {
-      const offices = await storage.getAllCorporateOffices();
-      res.json(offices);
+      const user = req.user;
+      
+      if (user.isSuperAdmin) {
+        const offices = await storage.getAllCorporateOffices();
+        return res.json(offices);
+      }
+      
+      if (user.entityType === 'Corporate' && user.entityId) {
+        const office = await storage.getCorporateOffice(user.entityId);
+        return res.json(office ? [office] : []);
+      }
+      
+      return res.status(403).json({ error: 'Access denied' });
     } catch (error: any) {
       res.status(400).json({ error: error.message });
     }
@@ -394,18 +433,56 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Meal Record routes
-  app.get("/api/meals", authMiddleware, async (req, res) => {
+  app.get("/api/meals", authMiddleware, loadUserMiddleware, async (req: AuthRequest, res) => {
     try {
-      const meals = await storage.getAllMealRecords();
-      res.json(meals);
+      const user = req.user;
+      
+      if (user.isSuperAdmin) {
+        const meals = await storage.getAllMealRecords();
+        return res.json(meals);
+      }
+      
+      if (user.memberId) {
+        const meals = await storage.getMealRecordsByMember(user.memberId);
+        return res.json(meals);
+      }
+      
+      if (user.entityType && user.entityId) {
+        const members = await storage.getMembersByEntity(user.entityType, user.entityId);
+        const memberIds = members.map(m => m.id);
+        const allMeals = await storage.getAllMealRecords();
+        const filteredMeals = allMeals.filter(meal => memberIds.includes(meal.memberId));
+        return res.json(filteredMeals);
+      }
+      
+      return res.status(403).json({ error: 'Access denied' });
     } catch (error: any) {
       res.status(400).json({ error: error.message });
     }
   });
 
-  app.post("/api/meals", authMiddleware, async (req, res) => {
+  app.post("/api/meals", authMiddleware, loadUserMiddleware, async (req: AuthRequest, res) => {
     try {
+      const user = req.user;
       const data = insertMealRecordSchema.parse(req.body);
+      
+      if (!user.isSuperAdmin) {
+        const member = await storage.getMember(data.memberId);
+        if (!member) {
+          return res.status(404).json({ error: 'Member not found' });
+        }
+        
+        if (user.memberId && user.memberId !== data.memberId) {
+          return res.status(403).json({ error: 'Can only record your own meals' });
+        }
+        
+        if (user.entityType && user.entityId) {
+          if (member.entityType !== user.entityType || member.entityId !== user.entityId) {
+            return res.status(403).json({ error: 'Access denied' });
+          }
+        }
+      }
+      
       const meal = await storage.createMealRecord(data);
       res.json(meal);
     } catch (error: any) {
@@ -413,9 +490,29 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get("/api/meals/member/:memberId", authMiddleware, async (req, res) => {
+  app.get("/api/meals/member/:memberId", authMiddleware, loadUserMiddleware, async (req: AuthRequest, res) => {
     try {
-      const meals = await storage.getMealRecordsByMember(req.params.memberId);
+      const user = req.user;
+      const memberId = req.params.memberId;
+      
+      if (!user.isSuperAdmin) {
+        const member = await storage.getMember(memberId);
+        if (!member) {
+          return res.status(404).json({ error: 'Member not found' });
+        }
+        
+        if (user.memberId && user.memberId !== memberId) {
+          return res.status(403).json({ error: 'Access denied' });
+        }
+        
+        if (user.entityType && user.entityId) {
+          if (member.entityType !== user.entityType || member.entityId !== user.entityId) {
+            return res.status(403).json({ error: 'Access denied' });
+          }
+        }
+      }
+      
+      const meals = await storage.getMealRecordsByMember(memberId);
       res.json(meals);
     } catch (error: any) {
       res.status(400).json({ error: error.message });
@@ -423,10 +520,34 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Payment routes
-  app.get("/api/payments", authMiddleware, requirePermission('Manage Payments'), async (req, res) => {
+  app.get("/api/payments", authMiddleware, loadUserMiddleware, async (req: AuthRequest, res) => {
     try {
-      const payments = await storage.getAllPayments();
-      res.json(payments);
+      const user = req.user;
+      
+      if (user.isSuperAdmin) {
+        const payments = await storage.getAllPayments();
+        return res.json(payments);
+      }
+      
+      const hasPaymentPermission = req.userPermissions?.includes('Manage Payments');
+      if (!hasPaymentPermission && !req.userPermissions?.includes('View Own Costs')) {
+        return res.status(403).json({ error: 'Access denied' });
+      }
+      
+      if (user.entityType && user.entityId && hasPaymentPermission) {
+        const payments = await storage.getPaymentsByEntity(user.entityType, user.entityId);
+        return res.json(payments);
+      }
+      
+      if (user.memberId) {
+        const member = await storage.getMember(user.memberId);
+        if (member && member.entityType && member.entityId) {
+          const payments = await storage.getPaymentsByEntity(member.entityType, member.entityId);
+          return res.json(payments);
+        }
+      }
+      
+      return res.json([]);
     } catch (error: any) {
       res.status(400).json({ error: error.message });
     }

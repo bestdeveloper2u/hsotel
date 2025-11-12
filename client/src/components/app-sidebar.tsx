@@ -24,13 +24,14 @@ const menuItems: MenuItem[] = [
   { title: "Dashboard", url: "/", icon: Home, requiredPermissions: [] },
   { title: "Users", url: "/users", icon: Users, requiredPermissions: ['Manage Users'] },
   { title: "Roles", url: "/roles", icon: Shield, requiredPermissions: ['Manage Roles'] },
-  { title: "Hostels", url: "/hostels", icon: Building2, requiredPermissions: ['Manage Hostels'] },
-  { title: "Corporate Offices", url: "/corporate", icon: Building, requiredPermissions: ['Manage Hostels'] },
-  { title: "Members", url: "/members", icon: UserCircle, requiredPermissions: ['Manage Members'] },
-  { title: "Meal Tracking", url: "/meals", icon: Utensils, requiredPermissions: ['Manage Members'] },
-  { title: "Meal Prices", url: "/meal-prices", icon: DollarSign, requiredPermissions: [] },
-  { title: "Payments", url: "/payments", icon: CreditCard, requiredPermissions: ['Manage Payments'] },
-  { title: "Feedback", url: "/feedback", icon: MessageSquare, requiredPermissions: [] },
+  { title: "Hostels", url: "/hostels", icon: Building2, requiredPermissions: ['Manage Hostels', 'View All Data'] },
+  { title: "Corporate Offices", url: "/corporate", icon: Building, requiredPermissions: ['Manage Corporate Offices', 'View All Data'] },
+  { title: "Members", url: "/members", icon: UserCircle, requiredPermissions: ['Manage Members', 'View All Data'] },
+  { title: "Meal Tracking", url: "/meals", icon: Utensils, requiredPermissions: ['Manage Members', 'View Own Meals', 'View All Data'] },
+  { title: "Meal Prices", url: "/meal-prices", icon: DollarSign, requiredPermissions: ['Manage Payments', 'View Reports', 'View Own Costs', 'View All Data'] },
+  { title: "Payments", url: "/payments", icon: CreditCard, requiredPermissions: ['Manage Payments', 'View Own Costs', 'View All Data'] },
+  { title: "Feedback", url: "/feedback", icon: MessageSquare, requiredPermissions: ['Manage Feedback', 'View Reports', 'View All Data'] },
+  { title: "Settings", url: "/settings", icon: Settings, requiredPermissions: [] },
 ];
 
 export function AppSidebar() {
@@ -39,6 +40,7 @@ export function AppSidebar() {
 
   const hasPermission = (requiredPermissions: string[]) => {
     if (requiredPermissions.length === 0) return true;
+    if (user?.isSuperAdmin) return true;
     if (!user?.role?.permissions) return false;
     return requiredPermissions.some(permission => 
       user.role!.permissions.includes(permission)

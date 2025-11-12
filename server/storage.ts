@@ -93,23 +93,67 @@ export class DbStorage implements IStorage {
     this.initialized = true;
 
     try {
-      await db.insert(roles).values([
+      const defaultRoles = [
         {
           name: 'Super Admin',
-          description: 'Full system access',
-          permissions: ['Manage Users', 'Manage Roles', 'Manage Hostels', 'Manage Members', 'View Reports', 'Manage Payments', 'Manage Feedback']
+          description: 'Full system access - can manage everything',
+          permissions: ['Manage Users', 'Manage Roles', 'Manage Hostels', 'Manage Corporate Offices', 'Manage Members', 'View Reports', 'Manage Payments', 'Manage Feedback', 'View All Data']
         },
         {
-          name: 'Hostel Owner',
-          description: 'Hostel management access',
-          permissions: ['Manage Members', 'View Reports', 'Manage Payments']
+          name: 'Hostel Admin',
+          description: 'Can only view and manage their own hostel and its members',
+          permissions: ['Manage Hostels', 'Manage Members', 'View Reports', 'Manage Payments', 'Manage Feedback']
         },
         {
           name: 'Corporate Admin',
-          description: 'Corporate office management access',
-          permissions: ['Manage Members', 'View Reports']
+          description: 'Can only view and manage their own office and associated employees',
+          permissions: ['Manage Corporate Offices', 'Manage Members', 'View Reports']
+        },
+        {
+          name: 'Individual Member',
+          description: 'Can only view their own meal details and meal cost',
+          permissions: ['View Own Meals', 'View Own Costs']
         }
-      ]).onConflictDoNothing();
+      ];
+
+      for (const roleData of defaultRoles) {
+        const existingRole = await db.select().from(roles).where(eq(roles.name, roleData.name)).limit(1);
+        
+        if (existingRole.length > 0) {
+          await db.update(roles)
+            .set({ 
+              description: roleData.description, 
+              permissions: roleData.permissions 
+            })
+            .where(eq(roles.name, roleData.name));
+        } else {
+          await db.insert(roles).values(roleData);
+        }
+      }
+
+      const superAdminRole = await db.select().from(roles).where(eq(roles.name, 'Super Admin')).limit(1);
+      if (superAdminRole.length > 0) {
+        const existingSuperAdmin = await db.select().from(users).where(eq(users.isSuperAdmin, true)).limit(1);
+        
+        if (existingSuperAdmin.length === 0) {
+          console.log('[DbStorage] Creating default Super Admin...');
+          const bcrypt = await import('bcrypt');
+          const hashedPassword = await bcrypt.hash('admin123', 10);
+          
+          await db.insert(users).values({
+            email: 'admin@hostelmanager.com',
+            password: hashedPassword,
+            name: 'Super Administrator',
+            roleId: superAdminRole[0].id,
+            entityType: null,
+            entityId: null,
+            memberId: null,
+            isSuperAdmin: true
+          }).onConflictDoNothing();
+          
+          console.log('[DbStorage] Default Super Admin created: admin@hostelmanager.com / admin123');
+        }
+      }
     } catch (error) {
       console.error('[DbStorage] Error initializing default roles:', error);
     }

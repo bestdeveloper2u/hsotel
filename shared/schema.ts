@@ -17,8 +17,10 @@ export const users = pgTable("users", {
   password: text("password").notNull(),
   name: text("name").notNull(),
   roleId: varchar("role_id").references(() => roles.id),
-  entityType: text("entity_type").notNull(),
+  entityType: text("entity_type"),
   entityId: varchar("entity_id"),
+  memberId: varchar("member_id").references(() => members.id),
+  isSuperAdmin: boolean("is_super_admin").default(false),
   createdAt: timestamp("created_at").defaultNow(),
 });
 
