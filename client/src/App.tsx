@@ -13,6 +13,11 @@ import UsersPage from "@/pages/users";
 import RolesPage from "@/pages/roles";
 import MealsPage from "@/pages/meals";
 import FeedbackPage from "@/pages/feedback";
+import HostelsPage from "@/pages/hostels";
+import CorporatePage from "@/pages/corporate";
+import MembersPage from "@/pages/members";
+import PaymentsPage from "@/pages/payments";
+import SettingsPage from "@/pages/settings";
 
 function ProtectedRoute({ component: Component }: { component: () => JSX.Element }) {
   const { user, isLoading } = useAuth();
@@ -39,8 +44,13 @@ function Router() {
           <Route path="/" component={() => <ProtectedRoute component={Dashboard} />} />
           <Route path="/users" component={() => <ProtectedRoute component={UsersPage} />} />
           <Route path="/roles" component={() => <ProtectedRoute component={RolesPage} />} />
+          <Route path="/hostels" component={() => <ProtectedRoute component={HostelsPage} />} />
+          <Route path="/corporate" component={() => <ProtectedRoute component={CorporatePage} />} />
+          <Route path="/members" component={() => <ProtectedRoute component={MembersPage} />} />
           <Route path="/meals" component={() => <ProtectedRoute component={MealsPage} />} />
+          <Route path="/payments" component={() => <ProtectedRoute component={PaymentsPage} />} />
           <Route path="/feedback" component={() => <ProtectedRoute component={FeedbackPage} />} />
+          <Route path="/settings" component={() => <ProtectedRoute component={SettingsPage} />} />
         </>
       ) : (
         <Route path="*" component={() => <Redirect to="/login" />} />
