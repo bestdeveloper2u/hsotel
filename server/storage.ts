@@ -8,7 +8,6 @@ import type {
   Payment, InsertPayment,
   Feedback, InsertFeedback
 } from "@shared/schema";
-import { randomUUID } from "crypto";
 
 export interface IStorage {
   // Users
@@ -70,327 +69,254 @@ export interface IStorage {
   getAllFeedback(): Promise<Feedback[]>;
 }
 
-export class MemStorage implements IStorage {
-  private users: Map<string, User>;
-  private roles: Map<string, Role>;
-  private hostels: Map<string, Hostel>;
-  private corporateOffices: Map<string, CorporateOffice>;
-  private members: Map<string, Member>;
-  private mealRecords: Map<string, MealRecord>;
-  private payments: Map<string, Payment>;
-  private feedbacks: Map<string, Feedback>;
+import { db } from "./db";
+import { 
+  users, roles, hostels, corporateOffices, members, 
+  mealRecords, payments, feedback 
+} from "@shared/schema";
+import { eq, and, gte, lte } from "drizzle-orm";
 
-  constructor() {
-    this.users = new Map();
-    this.roles = new Map();
-    this.hostels = new Map();
-    this.corporateOffices = new Map();
-    this.members = new Map();
-    this.mealRecords = new Map();
-    this.payments = new Map();
-    this.feedbacks = new Map();
-    
-    // Initialize default roles
-    const superAdminRole: Role = {
-      id: 'super-admin-role',
-      name: 'Super Admin',
-      description: 'Full system access',
-      permissions: ['Manage Users', 'Manage Roles', 'Manage Hostels', 'Manage Members', 'View Reports', 'Manage Payments', 'Manage Feedback'],
-      createdAt: new Date()
-    };
-    this.roles.set(superAdminRole.id, superAdminRole);
+export class DbStorage implements IStorage {
+  private initialized = false;
 
-    const hostelOwnerRole: Role = {
-      id: 'hostel-owner-role',
-      name: 'Hostel Owner',
-      description: 'Hostel management access',
-      permissions: ['Manage Members', 'View Reports', 'Manage Payments'],
-      createdAt: new Date()
-    };
-    this.roles.set(hostelOwnerRole.id, hostelOwnerRole);
+  private async initializeDefaultRoles() {
+    if (this.initialized) return;
+    this.initialized = true;
 
-    const corporateAdminRole: Role = {
-      id: 'corporate-admin-role',
-      name: 'Corporate Admin',
-      description: 'Corporate office management access',
-      permissions: ['Manage Members', 'View Reports'],
-      createdAt: new Date()
-    };
-    this.roles.set(corporateAdminRole.id, corporateAdminRole);
-  }
+    try {
+      const existingRoles = await db.select().from(roles);
+      
+      if (existingRoles.length === 0) {
+        await db.insert(roles).values({
+          name: 'Super Admin',
+          description: 'Full system access',
+          permissions: ['Manage Users', 'Manage Roles', 'Manage Hostels', 'Manage Members', 'View Reports', 'Manage Payments', 'Manage Feedback']
+        });
 
-  // Users
-  async getUser(id: string): Promise<User | undefined> {
-    return this.users.get(id);
-  }
+        await db.insert(roles).values({
+          name: 'Hostel Owner',
+          description: 'Hostel management access',
+          permissions: ['Manage Members', 'View Reports', 'Manage Payments']
+        });
 
-  async getUserByEmail(email: string): Promise<User | undefined> {
-    return Array.from(this.users.values()).find(user => user.email === email);
-  }
-
-  async createUser(insertUser: InsertUser): Promise<User> {
-    const id = randomUUID();
-    const user: User = {
-      ...insertUser,
-      id,
-      roleId: insertUser.roleId ?? null,
-      entityId: insertUser.entityId ?? null,
-      createdAt: new Date()
-    };
-    this.users.set(id, user);
-    return user;
-  }
-
-  async updateUser(id: string, userData: Partial<InsertUser>): Promise<User | undefined> {
-    const user = this.users.get(id);
-    if (!user) return undefined;
-    const updated = { ...user, ...userData };
-    this.users.set(id, updated);
-    return updated;
-  }
-
-  async deleteUser(id: string): Promise<boolean> {
-    return this.users.delete(id);
-  }
-
-  async getAllUsers(): Promise<User[]> {
-    return Array.from(this.users.values());
-  }
-
-  // Roles
-  async getRole(id: string): Promise<Role | undefined> {
-    return this.roles.get(id);
-  }
-
-  async getRoleByName(name: string): Promise<Role | undefined> {
-    return Array.from(this.roles.values()).find(role => role.name === name);
-  }
-
-  async createRole(insertRole: InsertRole): Promise<Role> {
-    const id = randomUUID();
-    const role: Role = {
-      ...insertRole,
-      id,
-      description: insertRole.description ?? null,
-      createdAt: new Date()
-    };
-    this.roles.set(id, role);
-    return role;
-  }
-
-  async updateRole(id: string, roleData: Partial<InsertRole>): Promise<Role | undefined> {
-    const role = this.roles.get(id);
-    if (!role) return undefined;
-    const updated = { ...role, ...roleData };
-    this.roles.set(id, updated);
-    return updated;
-  }
-
-  async deleteRole(id: string): Promise<boolean> {
-    return this.roles.delete(id);
+        await db.insert(roles).values({
+          name: 'Corporate Admin',
+          description: 'Corporate office management access',
+          permissions: ['Manage Members', 'View Reports']
+        });
+      }
+    } catch (error) {
+      console.error('Failed to initialize default roles:', error);
+    }
   }
 
   async getAllRoles(): Promise<Role[]> {
-    return Array.from(this.roles.values());
+    await this.initializeDefaultRoles();
+    return await db.select().from(roles);
   }
 
-  // Hostels
+  async getUser(id: string): Promise<User | undefined> {
+    const result = await db.select().from(users).where(eq(users.id, id)).limit(1);
+    return result[0];
+  }
+
+  async getUserByEmail(email: string): Promise<User | undefined> {
+    const result = await db.select().from(users).where(eq(users.email, email)).limit(1);
+    return result[0];
+  }
+
+  async createUser(insertUser: InsertUser): Promise<User> {
+    const result = await db.insert(users).values(insertUser).returning();
+    return result[0];
+  }
+
+  async updateUser(id: string, userData: Partial<InsertUser>): Promise<User | undefined> {
+    const result = await db.update(users).set(userData).where(eq(users.id, id)).returning();
+    return result[0];
+  }
+
+  async deleteUser(id: string): Promise<boolean> {
+    const result = await db.delete(users).where(eq(users.id, id));
+    return (result.rowCount ?? 0) > 0;
+  }
+
+  async getAllUsers(): Promise<User[]> {
+    return await db.select().from(users);
+  }
+
+  async getRole(id: string): Promise<Role | undefined> {
+    const result = await db.select().from(roles).where(eq(roles.id, id)).limit(1);
+    return result[0];
+  }
+
+  async getRoleByName(name: string): Promise<Role | undefined> {
+    const result = await db.select().from(roles).where(eq(roles.name, name)).limit(1);
+    return result[0];
+  }
+
+  async createRole(insertRole: InsertRole): Promise<Role> {
+    const result = await db.insert(roles).values(insertRole).returning();
+    return result[0];
+  }
+
+  async updateRole(id: string, roleData: Partial<InsertRole>): Promise<Role | undefined> {
+    const result = await db.update(roles).set(roleData).where(eq(roles.id, id)).returning();
+    return result[0];
+  }
+
+  async deleteRole(id: string): Promise<boolean> {
+    const result = await db.delete(roles).where(eq(roles.id, id));
+    return (result.rowCount ?? 0) > 0;
+  }
+
+  async getAllRoles(): Promise<Role[]> {
+    return await db.select().from(roles);
+  }
+
   async getHostel(id: string): Promise<Hostel | undefined> {
-    return this.hostels.get(id);
+    const result = await db.select().from(hostels).where(eq(hostels.id, id)).limit(1);
+    return result[0];
   }
 
   async createHostel(insertHostel: InsertHostel): Promise<Hostel> {
-    const id = randomUUID();
-    const hostel: Hostel = {
-      ...insertHostel,
-      id,
-      createdAt: new Date()
-    };
-    this.hostels.set(id, hostel);
-    return hostel;
+    const result = await db.insert(hostels).values(insertHostel).returning();
+    return result[0];
   }
 
   async updateHostel(id: string, hostelData: Partial<InsertHostel>): Promise<Hostel | undefined> {
-    const hostel = this.hostels.get(id);
-    if (!hostel) return undefined;
-    const updated = { ...hostel, ...hostelData };
-    this.hostels.set(id, updated);
-    return updated;
+    const result = await db.update(hostels).set(hostelData).where(eq(hostels.id, id)).returning();
+    return result[0];
   }
 
   async deleteHostel(id: string): Promise<boolean> {
-    return this.hostels.delete(id);
+    const result = await db.delete(hostels).where(eq(hostels.id, id));
+    return (result.rowCount ?? 0) > 0;
   }
 
   async getAllHostels(): Promise<Hostel[]> {
-    return Array.from(this.hostels.values());
+    return await db.select().from(hostels);
   }
 
-  // Corporate Offices
   async getCorporateOffice(id: string): Promise<CorporateOffice | undefined> {
-    return this.corporateOffices.get(id);
+    const result = await db.select().from(corporateOffices).where(eq(corporateOffices.id, id)).limit(1);
+    return result[0];
   }
 
   async createCorporateOffice(insertOffice: InsertCorporateOffice): Promise<CorporateOffice> {
-    const id = randomUUID();
-    const office: CorporateOffice = {
-      ...insertOffice,
-      id,
-      createdAt: new Date()
-    };
-    this.corporateOffices.set(id, office);
-    return office;
+    const result = await db.insert(corporateOffices).values(insertOffice).returning();
+    return result[0];
   }
 
   async updateCorporateOffice(id: string, officeData: Partial<InsertCorporateOffice>): Promise<CorporateOffice | undefined> {
-    const office = this.corporateOffices.get(id);
-    if (!office) return undefined;
-    const updated = { ...office, ...officeData };
-    this.corporateOffices.set(id, updated);
-    return updated;
+    const result = await db.update(corporateOffices).set(officeData).where(eq(corporateOffices.id, id)).returning();
+    return result[0];
   }
 
   async deleteCorporateOffice(id: string): Promise<boolean> {
-    return this.corporateOffices.delete(id);
+    const result = await db.delete(corporateOffices).where(eq(corporateOffices.id, id));
+    return (result.rowCount ?? 0) > 0;
   }
 
   async getAllCorporateOffices(): Promise<CorporateOffice[]> {
-    return Array.from(this.corporateOffices.values());
+    return await db.select().from(corporateOffices);
   }
 
-  // Members
   async getMember(id: string): Promise<Member | undefined> {
-    return this.members.get(id);
+    const result = await db.select().from(members).where(eq(members.id, id)).limit(1);
+    return result[0];
   }
 
   async createMember(insertMember: InsertMember): Promise<Member> {
-    const id = randomUUID();
-    const member: Member = {
-      ...insertMember,
-      id,
-      phone: insertMember.phone ?? null,
-      mealPlanType: insertMember.mealPlanType ?? null,
-      isActive: insertMember.isActive ?? true,
-      createdAt: new Date()
-    };
-    this.members.set(id, member);
-    return member;
+    const result = await db.insert(members).values(insertMember).returning();
+    return result[0];
   }
 
   async updateMember(id: string, memberData: Partial<InsertMember>): Promise<Member | undefined> {
-    const member = this.members.get(id);
-    if (!member) return undefined;
-    const updated = { ...member, ...memberData };
-    this.members.set(id, updated);
-    return updated;
+    const result = await db.update(members).set(memberData).where(eq(members.id, id)).returning();
+    return result[0];
   }
 
   async deleteMember(id: string): Promise<boolean> {
-    return this.members.delete(id);
+    const result = await db.delete(members).where(eq(members.id, id));
+    return (result.rowCount ?? 0) > 0;
   }
 
   async getMembersByEntity(entityType: string, entityId: string): Promise<Member[]> {
-    return Array.from(this.members.values()).filter(
-      m => m.entityType === entityType && m.entityId === entityId
+    return await db.select().from(members).where(
+      and(eq(members.entityType, entityType), eq(members.entityId, entityId))
     );
   }
 
   async getAllMembers(): Promise<Member[]> {
-    return Array.from(this.members.values());
+    return await db.select().from(members);
   }
 
-  // Meal Records
   async getMealRecord(id: string): Promise<MealRecord | undefined> {
-    return this.mealRecords.get(id);
+    const result = await db.select().from(mealRecords).where(eq(mealRecords.id, id)).limit(1);
+    return result[0];
   }
 
   async createMealRecord(insertRecord: InsertMealRecord): Promise<MealRecord> {
-    const id = randomUUID();
-    const record: MealRecord = {
-      ...insertRecord,
-      id,
-      createdAt: new Date()
-    };
-    this.mealRecords.set(id, record);
-    return record;
+    const result = await db.insert(mealRecords).values(insertRecord).returning();
+    return result[0];
   }
 
   async getMealRecordsByMember(memberId: string): Promise<MealRecord[]> {
-    return Array.from(this.mealRecords.values()).filter(r => r.memberId === memberId);
+    return await db.select().from(mealRecords).where(eq(mealRecords.memberId, memberId));
   }
 
   async getMealRecordsByDateRange(startDate: Date, endDate: Date): Promise<MealRecord[]> {
-    return Array.from(this.mealRecords.values()).filter(r => {
-      const recordDate = new Date(r.date);
-      return recordDate >= startDate && recordDate <= endDate;
-    });
+    return await db.select().from(mealRecords).where(
+      and(gte(mealRecords.date, startDate), lte(mealRecords.date, endDate))
+    );
   }
 
   async getAllMealRecords(): Promise<MealRecord[]> {
-    return Array.from(this.mealRecords.values());
+    return await db.select().from(mealRecords);
   }
 
-  // Payments
   async getPayment(id: string): Promise<Payment | undefined> {
-    return this.payments.get(id);
+    const result = await db.select().from(payments).where(eq(payments.id, id)).limit(1);
+    return result[0];
   }
 
   async createPayment(insertPayment: InsertPayment): Promise<Payment> {
-    const id = randomUUID();
-    const payment: Payment = {
-      ...insertPayment,
-      id,
-      stripePaymentId: insertPayment.stripePaymentId ?? null,
-      createdAt: new Date()
-    };
-    this.payments.set(id, payment);
-    return payment;
+    const result = await db.insert(payments).values(insertPayment).returning();
+    return result[0];
   }
 
   async updatePayment(id: string, paymentData: Partial<InsertPayment>): Promise<Payment | undefined> {
-    const payment = this.payments.get(id);
-    if (!payment) return undefined;
-    const updated = { ...payment, ...paymentData };
-    this.payments.set(id, updated);
-    return updated;
+    const result = await db.update(payments).set(paymentData).where(eq(payments.id, id)).returning();
+    return result[0];
   }
 
   async getPaymentsByEntity(entityType: string, entityId: string): Promise<Payment[]> {
-    return Array.from(this.payments.values()).filter(
-      p => p.entityType === entityType && p.entityId === entityId
+    return await db.select().from(payments).where(
+      and(eq(payments.entityType, entityType), eq(payments.entityId, entityId))
     );
   }
 
   async getAllPayments(): Promise<Payment[]> {
-    return Array.from(this.payments.values());
+    return await db.select().from(payments);
   }
 
-  // Feedback
   async getFeedback(id: string): Promise<Feedback | undefined> {
-    return this.feedbacks.get(id);
+    const result = await db.select().from(feedback).where(eq(feedback.id, id)).limit(1);
+    return result[0];
   }
 
   async createFeedback(insertFeedback: InsertFeedback): Promise<Feedback> {
-    const id = randomUUID();
-    const feedback: Feedback = {
-      ...insertFeedback,
-      id,
-      entityType: insertFeedback.entityType ?? null,
-      entityId: insertFeedback.entityId ?? null,
-      comment: insertFeedback.comment ?? null,
-      createdAt: new Date()
-    };
-    this.feedbacks.set(id, feedback);
-    return feedback;
+    const result = await db.insert(feedback).values(insertFeedback).returning();
+    return result[0];
   }
 
   async getFeedbackByUser(userId: string): Promise<Feedback[]> {
-    return Array.from(this.feedbacks.values()).filter(f => f.userId === userId);
+    return await db.select().from(feedback).where(eq(feedback.userId, userId));
   }
 
   async getAllFeedback(): Promise<Feedback[]> {
-    return Array.from(this.feedbacks.values());
+    return await db.select().from(feedback);
   }
 }
 
-export const storage = new MemStorage();
+export const storage = new DbStorage();
