@@ -10,7 +10,8 @@ import {
   SidebarMenuItem,
   SidebarFooter,
 } from "@/components/ui/sidebar";
-import { useLocation } from "wouter";
+import { Link, useLocation } from "wouter";
+import { useAuth } from "@/lib/auth";
 
 const menuItems = [
   { title: "Dashboard", url: "/", icon: Home },
@@ -26,6 +27,7 @@ const menuItems = [
 
 export function AppSidebar() {
   const [location] = useLocation();
+  const { logout } = useAuth();
 
   return (
     <Sidebar>
@@ -41,10 +43,10 @@ export function AppSidebar() {
               {menuItems.map((item) => (
                 <SidebarMenuItem key={item.title}>
                   <SidebarMenuButton asChild isActive={location === item.url} data-testid={`link-${item.title.toLowerCase().replace(' ', '-')}`}>
-                    <a href={item.url}>
+                    <Link href={item.url}>
                       <item.icon className="w-4 h-4" />
                       <span>{item.title}</span>
-                    </a>
+                    </Link>
                   </SidebarMenuButton>
                 </SidebarMenuItem>
               ))}
@@ -55,19 +57,17 @@ export function AppSidebar() {
       <SidebarFooter className="border-t border-sidebar-border p-4">
         <SidebarMenu>
           <SidebarMenuItem>
-            <SidebarMenuButton asChild data-testid="link-settings">
-              <a href="/settings">
+            <SidebarMenuButton asChild isActive={location === "/settings"} data-testid="link-settings">
+              <Link href="/settings">
                 <Settings className="w-4 h-4" />
                 <span>Settings</span>
-              </a>
+              </Link>
             </SidebarMenuButton>
           </SidebarMenuItem>
           <SidebarMenuItem>
-            <SidebarMenuButton asChild data-testid="button-logout">
-              <a href="/login">
-                <LogOut className="w-4 h-4" />
-                <span>Logout</span>
-              </a>
+            <SidebarMenuButton onClick={logout} data-testid="button-logout">
+              <LogOut className="w-4 h-4" />
+              <span>Logout</span>
             </SidebarMenuButton>
           </SidebarMenuItem>
         </SidebarMenu>
