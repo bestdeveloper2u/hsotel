@@ -82,6 +82,18 @@ export const feedback = pgTable("feedback", {
   createdAt: timestamp("created_at").defaultNow(),
 });
 
+export const mealPrices = pgTable("meal_prices", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  entityType: text("entity_type").notNull(),
+  entityId: varchar("entity_id").notNull(),
+  breakfastPrice: decimal("breakfast_price", { precision: 10, scale: 2 }).notNull().default('0'),
+  lunchPrice: decimal("lunch_price", { precision: 10, scale: 2 }).notNull().default('0'),
+  dinnerPrice: decimal("dinner_price", { precision: 10, scale: 2 }).notNull().default('0'),
+  effectiveDate: timestamp("effective_date").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
 export const insertUserSchema = createInsertSchema(users).omit({ id: true, createdAt: true });
 export const insertRoleSchema = createInsertSchema(roles).omit({ id: true, createdAt: true });
 export const insertHostelSchema = createInsertSchema(hostels).omit({ id: true, createdAt: true });
@@ -90,6 +102,7 @@ export const insertMemberSchema = createInsertSchema(members).omit({ id: true, c
 export const insertMealRecordSchema = createInsertSchema(mealRecords).omit({ id: true, createdAt: true });
 export const insertPaymentSchema = createInsertSchema(payments).omit({ id: true, createdAt: true });
 export const insertFeedbackSchema = createInsertSchema(feedback).omit({ id: true, createdAt: true });
+export const insertMealPriceSchema = createInsertSchema(mealPrices).omit({ id: true, createdAt: true, updatedAt: true });
 
 export type User = typeof users.$inferSelect;
 export type InsertUser = z.infer<typeof insertUserSchema>;
@@ -107,3 +120,5 @@ export type Payment = typeof payments.$inferSelect;
 export type InsertPayment = z.infer<typeof insertPaymentSchema>;
 export type Feedback = typeof feedback.$inferSelect;
 export type InsertFeedback = z.infer<typeof insertFeedbackSchema>;
+export type MealPrice = typeof mealPrices.$inferSelect;
+export type InsertMealPrice = z.infer<typeof insertMealPriceSchema>;
