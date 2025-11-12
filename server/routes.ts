@@ -14,6 +14,20 @@ import {
 } from "@shared/schema";
 
 export async function registerRoutes(app: Express): Promise<Server> {
+  // Test endpoint to debug database issues
+  app.get("/api/test-db", async (_req, res) => {
+    try {
+      console.log('[TEST] Starting database test...');
+      const roles = await storage.getAllRoles();
+      console.log('[TEST] Got roles:', roles);
+      res.json({ success: true, roles, count: roles.length });
+    } catch (error: any) {
+      console.error('[TEST] Database test failed:', error);
+      console.error('[TEST] Error stack:', error.stack);
+      res.status(500).json({ error: error.message, stack: error.stack });
+    }
+  });
+
   // Authentication routes (public)
   app.post("/api/auth/register", async (req, res) => {
     try {

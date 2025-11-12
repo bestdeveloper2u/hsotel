@@ -84,35 +84,45 @@ export class DbStorage implements IStorage {
     this.initialized = true;
 
     try {
+      console.log('[DbStorage] Checking existing roles...');
       const existingRoles = await db.select().from(roles);
+      console.log('[DbStorage] Existing roles:', existingRoles);
       
-      if (existingRoles.length === 0) {
-        await db.insert(roles).values({
-          name: 'Super Admin',
-          description: 'Full system access',
-          permissions: ['Manage Users', 'Manage Roles', 'Manage Hostels', 'Manage Members', 'View Reports', 'Manage Payments', 'Manage Feedback']
-        });
-
-        await db.insert(roles).values({
-          name: 'Hostel Owner',
-          description: 'Hostel management access',
-          permissions: ['Manage Members', 'View Reports', 'Manage Payments']
-        });
-
-        await db.insert(roles).values({
-          name: 'Corporate Admin',
-          description: 'Corporate office management access',
-          permissions: ['Manage Members', 'View Reports']
-        });
+      if (!existingRoles || existingRoles.length === 0) {
+        console.log('[DbStorage] No roles found, inserting default roles...');
+        const result = await db.insert(roles).values([
+          {
+            name: 'Super Admin',
+            description: 'Full system access',
+            permissions: ['Manage Users', 'Manage Roles', 'Manage Hostels', 'Manage Members', 'View Reports', 'Manage Payments', 'Manage Feedback']
+          },
+          {
+            name: 'Hostel Owner',
+            description: 'Hostel management access',
+            permissions: ['Manage Members', 'View Reports', 'Manage Payments']
+          },
+          {
+            name: 'Corporate Admin',
+            description: 'Corporate office management access',
+            permissions: ['Manage Members', 'View Reports']
+          }
+        ]).returning();
+        console.log('[DbStorage] Roles inserted successfully:', result);
+      } else {
+        console.log(`[DbStorage] Found ${existingRoles.length} existing roles`);
       }
     } catch (error) {
-      console.error('Failed to initialize default roles:', error);
+      console.error('[DbStorage] Error in initializeDefaultRoles:', error);
+      console.error('[DbStorage] Error stack:', error instanceof Error ? error.stack : 'N/A');
+      console.error('[DbStorage] Error message:', error instanceof Error ? error.message : String(error));
+      throw error;
     }
   }
 
   async getAllRoles(): Promise<Role[]> {
     await this.initializeDefaultRoles();
-    return await db.select().from(roles);
+    const result = await db.select().from(roles);
+    return result || [];
   }
 
   async getUser(id: string): Promise<User | undefined> {
@@ -167,10 +177,6 @@ export class DbStorage implements IStorage {
   async deleteRole(id: string): Promise<boolean> {
     const result = await db.delete(roles).where(eq(roles.id, id));
     return (result.rowCount ?? 0) > 0;
-  }
-
-  async getAllRoles(): Promise<Role[]> {
-    return await db.select().from(roles);
   }
 
   async getHostel(id: string): Promise<Hostel | undefined> {
